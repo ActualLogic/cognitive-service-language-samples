@@ -3,22 +3,22 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "appId": {
-            "value": ""
+            "value": "381ae4ba-c050-4254-8c7c-588f336bb035"
         },
         "appSecret": {
-            "value": ""
+            "value": "qUp8Q~QHicelNEujbGE4CsRTrGFYqoGtDvXJeaQc"
         },
         "appType": {
             "value": "MultiTenant"
         },
         "botId": {
-            "value": ""
+            "value": "clu-bot-resource-2"
         },
         "botSku": {
-            "value": ""
+            "value": "S1"
         },
         "newAppServicePlanName": {
-            "value": ""
+            "value": "clu-bot-svc-plan-2"
         },
         "newAppServicePlanSku": {
             "value": {
@@ -30,13 +30,13 @@
             }
         },
         "appServicePlanLocation": {
-            "value": ""
+            "value": "westeurope"
         },
         "existingAppServicePlan": {
             "value": ""
         },
         "newWebAppName": {
-            "value": ""
+            "value": "clu-web-app-name-2"
         },
         "tenantId": {
             "value": ""

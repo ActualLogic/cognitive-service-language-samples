@@ -3,28 +3,28 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "groupLocation": {
-            "value": ""
+            "value": "westeurope"
         },
         "groupName": {
-            "value": ""
+            "value": "clu-deploy-demo"
         },
         "appId": {
-            "value": ""
+            "value": "clu-app-id"
         },
         "appSecret": {
-            "value": ""
+            "value": "e82-4fea-a93f-d5f8c39"
         },
         "appType": {
             "value": "MultiTenant"
         },
         "botId": {
-            "value": ""
+            "value": "clu-bot"
         },
         "botSku": {
             "value": ""
         },
         "newAppServicePlanName": {
-            "value": ""
+            "value": "clu-bot-svc-plan"
         },
         "newAppServicePlanSku": {
             "value": {
@@ -39,7 +39,7 @@
             "value": ""
         },
         "newWebAppName": {
-            "value": ""
+            "value": "clu-web-app-name"
         },
         "tenantId": {
             "value": ""
