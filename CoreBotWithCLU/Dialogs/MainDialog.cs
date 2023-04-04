@@ -1,121 +1,99 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Schema;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Recognizers.Text.DataTypes.TimexExpression;
 
-namespace Microsoft.BotBuilderSamples.Dialogs
+namespace Microsoft.BotBuilderSamples
 {
-    public class MainDialog : ComponentDialog
+    public class MainDialog : LogoutDialog
     {
-        private readonly FlightBookingRecognizer _cluRecognizer;
         protected readonly ILogger Logger;
 
-        // Dependency injection uses this constructor to instantiate MainDialog
-        public MainDialog(FlightBookingRecognizer cluRecognizer, BookingDialog bookingDialog, ILogger<MainDialog> logger)
-            : base(nameof(MainDialog))
+        public MainDialog(IConfiguration configuration, ILogger<MainDialog> logger)
+            : base(nameof(MainDialog), configuration["ConnectionName"])
         {
-            _cluRecognizer = cluRecognizer;
             Logger = logger;
 
-            AddDialog(new TextPrompt(nameof(TextPrompt)));
-            AddDialog(bookingDialog);
+            AddDialog(new OAuthPrompt(
+                nameof(OAuthPrompt),
+                new OAuthPromptSettings
+                {
+                    ConnectionName = ConnectionName,
+                    Text = "Please Sign In",
+                    Title = "Sign In",
+                    Timeout = 300000, // User has 5 minutes to login (1000 * 60 * 5)
+                }));
+
+            AddDialog(new ConfirmPrompt(nameof(ConfirmPrompt)));
+
             AddDialog(new WaterfallDialog(nameof(WaterfallDialog), new WaterfallStep[]
             {
-                IntroStepAsync,
-                ActStepAsync,
-                FinalStepAsync,
+                PromptStepAsync,
+                LoginStepAsync,
+                DisplayTokenPhase1Async,
+                DisplayTokenPhase2Async,
             }));
 
             // The initial child Dialog to run.
             InitialDialogId = nameof(WaterfallDialog);
         }
 
-        private async Task<DialogTurnResult> IntroStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        private async Task<DialogTurnResult> PromptStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            if (!_cluRecognizer.IsConfigured)
-            {
-                await stepContext.Context.SendActivityAsync(
-                    MessageFactory.Text("NOTE: CLU is not configured. To enable all capabilities, add 'CluProjectName', 'CluDeploymentName', 'CluAPIKey' and 'CluAPIHostName' to the appsettings.json file.", inputHint: InputHints.IgnoringInput), cancellationToken);
-
-                return await stepContext.NextAsync(null, cancellationToken);
-            }
-
-            // Use the text provided in FinalStepAsync or the default if it is the first time.
-            var weekLaterDate = DateTime.Now.AddDays(7).ToString("MMMM d, yyyy");
-            var messageText = stepContext.Options?.ToString() ?? $"What can I help you with today?\nSay something like \"Book a flight from Paris to Berlin on {weekLaterDate}\"";
-            var promptMessage = MessageFactory.Text(messageText, messageText, InputHints.ExpectingInput);
-            return await stepContext.PromptAsync(nameof(TextPrompt), new PromptOptions { Prompt = promptMessage }, cancellationToken);
+            return await stepContext.BeginDialogAsync(nameof(OAuthPrompt), null, cancellationToken);
         }
 
-        private async Task<DialogTurnResult> ActStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        private async Task<DialogTurnResult> LoginStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            if (!_cluRecognizer.IsConfigured)
+            // Get the token from the previous step. Note that we could also have gotten the
+            // token directly from the prompt itself. There is an example of this in the next method.
+            var tokenResponse = (TokenResponse)stepContext.Result;
+            if (tokenResponse != null)
             {
-                // CLU is not configured, we just run the BookingDialog path with an empty BookingDetailsInstance.
-                return await stepContext.BeginDialogAsync(nameof(BookingDialog), new BookingDetails(), cancellationToken);
+                await stepContext.Context.SendActivityAsync(MessageFactory.Text("You are now logged in."), cancellationToken);
+                return await stepContext.PromptAsync(nameof(ConfirmPrompt), new PromptOptions { Prompt = MessageFactory.Text("Would you like to view your token?") }, cancellationToken);
             }
 
-            // Call CLU and gather any potential booking details. (Note the TurnContext has the response to the prompt.)
-            var cluResult = await _cluRecognizer.RecognizeAsync<FlightBooking>(stepContext.Context, cancellationToken);
-            switch (cluResult.GetTopIntent().intent)
-            {
-                case FlightBooking.Intent.BookFlight:
-                    // Initialize BookingDetails with any entities we may have found in the response.
-                    var bookingDetails = new BookingDetails()
-                    {
-                        Destination = cluResult.Entities.GetToCity(),
-                        Origin = cluResult.Entities.GetFromCity(),
-                        TravelDate = cluResult.Entities.GetFlightDate(),
-                    };
-
-                    // Run the BookingDialog giving it whatever details we have from the CLU call, it will fill out the remainder.
-                    return await stepContext.BeginDialogAsync(nameof(BookingDialog), bookingDetails, cancellationToken);
-
-                case FlightBooking.Intent.GetWeather:
-                    // We haven't implemented the GetWeatherDialog so we just display a TODO message.
-                    var getWeatherMessageText = "TODO: get weather flow here";
-                    var getWeatherMessage = MessageFactory.Text(getWeatherMessageText, getWeatherMessageText, InputHints.IgnoringInput);
-                    await stepContext.Context.SendActivityAsync(getWeatherMessage, cancellationToken);
-                    break;
-
-                default:
-                    // Catch all for unhandled intents
-                    var didntUnderstandMessageText = $"Sorry, I didn't get that. Please try asking in a different way (intent was {cluResult.GetTopIntent().intent})";
-                    var didntUnderstandMessage = MessageFactory.Text(didntUnderstandMessageText, didntUnderstandMessageText, InputHints.IgnoringInput);
-                    await stepContext.Context.SendActivityAsync(didntUnderstandMessage, cancellationToken);
-                    break;
-            }
-
-            return await stepContext.NextAsync(null, cancellationToken);
+            await stepContext.Context.SendActivityAsync(MessageFactory.Text("Login was not successful please try again."), cancellationToken);
+            return await stepContext.EndDialogAsync(cancellationToken: cancellationToken);
         }
 
-        private async Task<DialogTurnResult> FinalStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        private async Task<DialogTurnResult> DisplayTokenPhase1Async(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            // If the child dialog ("BookingDialog") was cancelled, the user failed to confirm or if the intent wasn't BookFlight
-            // the Result here will be null.
-            if (stepContext.Result is BookingDetails result)
+            await stepContext.Context.SendActivityAsync(MessageFactory.Text("Thank you."), cancellationToken);
+
+            var result = (bool)stepContext.Result;
+            if (result)
             {
-                // Now we have all the booking details call the booking service.
-
-                // If the call to the booking service was successful tell the user.
-
-                var timeProperty = new TimexProperty(result.TravelDate);
-                var travelDateMsg = timeProperty.ToNaturalLanguage(DateTime.Now);
-                var messageText = $"I have you booked to {result.Destination} from {result.Origin} on {travelDateMsg}";
-                var message = MessageFactory.Text(messageText, messageText, InputHints.IgnoringInput);
-                await stepContext.Context.SendActivityAsync(message, cancellationToken);
+                // Call the prompt again because we need the token. The reasons for this are:
+                // 1. If the user is already logged in we do not need to store the token locally in the bot and worry
+                // about refreshing it. We can always just call the prompt again to get the token.
+                // 2. We never know how long it will take a user to respond. By the time the
+                // user responds the token may have expired. The user would then be prompted to login again.
+                //
+                // There is no reason to store the token locally in the bot because we can always just call
+                // the OAuth prompt to get the token or get a new token if needed.
+                return await stepContext.BeginDialogAsync(nameof(OAuthPrompt), cancellationToken: cancellationToken);
             }
 
-            // Restart the main dialog with a different message the second time around
-            var promptMessage = "What else can I do for you?";
-            return await stepContext.ReplaceDialogAsync(InitialDialogId, promptMessage, cancellationToken);
+            return await stepContext.EndDialogAsync(cancellationToken: cancellationToken);
+        }
+
+        private async Task<DialogTurnResult> DisplayTokenPhase2Async(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        {
+            var tokenResponse = (TokenResponse)stepContext.Result;
+            if (tokenResponse != null)
+            {
+                await stepContext.Context.SendActivityAsync(MessageFactory.Text($"Here is your token {tokenResponse.Token}"), cancellationToken);
+            }
+
+            return await stepContext.EndDialogAsync(cancellationToken: cancellationToken);
         }
     }
 }

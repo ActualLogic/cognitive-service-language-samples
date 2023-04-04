@@ -31,10 +31,21 @@ namespace Microsoft.BotBuilderSamples.Bots
                 {
                     var welcomeCard = CreateAdaptiveCardAttachment();
                     var response = MessageFactory.Attachment(welcomeCard, ssml: "Welcome to Bot Framework!");
-                    await turnContext.SendActivityAsync(response, cancellationToken);
+                    //await turnContext.SendActivityAsync(response, cancellationToken);
+                    
+                    await turnContext.SendActivityAsync(MessageFactory.Text("Welcome to AuthenticationBot. Type anything to get logged in. Type 'logout' to sign-out."), cancellationToken);
+
                     await Dialog.RunAsync(turnContext, ConversationState.CreateProperty<DialogState>("DialogState"), cancellationToken);
                 }
             }
+        }
+
+        protected override async Task OnTokenResponseEventAsync(ITurnContext<IEventActivity> turnContext, CancellationToken cancellationToken)
+        {
+            Logger.LogInformation("Running dialog with Token Response Event Activity.");
+
+            // Run the Dialog with the new Token Response Event Activity.
+            await Dialog.RunAsync(turnContext, ConversationState.CreateProperty<DialogState>(nameof(DialogState)), cancellationToken);
         }
 
         // Load attachment from embedded resource.
